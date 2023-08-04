@@ -6,8 +6,9 @@ const port = 3000
 
 // http trigger
 app.get('/check_conflict_task', async (req, res) => {
-  await check_conflict_task();
-  res.send('success!!!')
+  const record_id = req.query.record_id 
+  const result = await check_conflict_task(record_id);
+  res.send(result)
 });
 
 

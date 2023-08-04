@@ -28,9 +28,9 @@ function isCollide(start1,end1,start2,end2): boolean {
 }
 
 // search_and_replace
-export async function check_conflict_task() {
+export async function check_conflict_task(record_id:String) {
   const s = performance.now();
-  console.log('>>> starting');
+  console.log('>>> start check_conflict_task, record_id: ',record_id);
 
   const client = new BaseClient({
     appToken: APP_TOKEN,
@@ -40,9 +40,22 @@ export async function check_conflict_task() {
   
   let allRecords: IRecord[] = []
   let collideRecords : IRecord[] = []
+  let query = { page_size: 400 }
+  if (record_id) {
+    const triggerRecordRes = await client.base.appTableRecord.get({path: { table_id: TABLEID, record_id : record_id}})  
+    const triggerRecord = triggerRecordRes?.data?.record || {}
+    console.debug(triggerRecord)  
+    const developer = triggerRecord.fields['开发'][0]['name'] || "" //无法通过 id 来查询
+    if (developer) query.filter = 'CurrentValue.[开发]="' + developer + '"'
+    // if (developer) query.filter = 'CurrentValue.[开发]="骆仕恺"'
+    // const developer = modifiedRecord.fields['开发'][0]['id'] //无法通过 id 来查询
+    // if (developer) query.filter = 'CurrentValue.[开发]="' + developer + '"'
+    console.debug(query)  
+  }
+  
 
   // iterate over all records
-  for await (const data of await client.base.appTableRecord.listWithIterator({ params: { page_size: 400 }, path: { table_id: TABLEID } })) {
+  for await (const data of await client.base.appTableRecord.listWithIterator({ params: query, path: { table_id: TABLEID }, query : query })) {
     const records = data?.items || [];
     console.debug('record : ', JSON.stringify(records[0]))
     
@@ -56,7 +69,7 @@ export async function check_conflict_task() {
   }
     console.log('>>> allRecords length : ', allRecords.length);
 
-  
+    
     for (let i = 0; i < allRecords.length; i++) {
       // Get cell string from specified fieldId and recordId
       const currentRecord = allRecords[i]
@@ -126,6 +139,7 @@ export async function check_conflict_task() {
 
   const e = performance.now();
   console.log('检查完毕,耗时：'+ (e-s)/1000 + 's')
+  return "检测到 " + collideRecords.length + "条冲突任务，更新完毕" 
 }
 
 
