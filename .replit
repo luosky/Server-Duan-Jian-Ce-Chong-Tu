@@ -1,0 +1,4 @@
+run = "npx vite-node --watch server.ts"
+
+# [nix]
+# channel = "stable-21_11"
