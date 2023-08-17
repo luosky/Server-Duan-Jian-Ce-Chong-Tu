@@ -16,7 +16,7 @@ interface IRecord {
 // const PERSONAL_BASE_TOKEN = process.env['PERSONAL_BASE_TOKEN']
 // const TABLEID = process.env['TABLE_ID']
 
-//https://jiliguala.feishu.cn/base/bascn00boudohds3J3Rbix5h6Bd?table=tblgxvkbphNNrBEw&view=vew2hRFW2F#CategoryAutomatedUpdate&from=bitable_automation
+
 const APP_TOKEN = process.env['PROD_APP_TOKEN']
 const PERSONAL_BASE_TOKEN = process.env['PROD_PERSONAL_BASE_TOKEN']
 const TABLEID = process.env['PROD_TABLE_ID']
@@ -32,20 +32,15 @@ function isCollide(start1,end1,start2,end2): boolean {
     (start1 <= start2 && end1 >= end2)
 }
 
-async function populateQuery(record_id) {
-  let query = { page_size: 400 }
-  
-  if (record_id) {
-    const triggerRecordRes = await client.base.appTableRecord.get({path: { table_id: TABLEID, record_id : record_id}})  
-    const triggerRecord = triggerRecordRes?.data?.record || {}
-    console.debug(triggerRecord)  
-    const developer = triggerRecord.fields['开发'][0]['name'] || "" //无法通过 id 来查询
-    if (developer) query.filter = 'CurrentValue.[开发]="' + developer + '"'
-    // if (developer) query.filter = 'CurrentValue.[开发]="骆仕恺"'
-    // const developer = modifiedRecord.fields['开发'][0]['id'] //无法通过 id 来查询
-    // if (developer) query.filter = 'CurrentValue.[开发]="' + developer + '"'
-    console.debug(query)  
+async function populateQuery(username) {
+  let query = { 
+    page_size: 500,
+    field_names: '["开发","任务标题","开始时间","完成时间"]'
   }
+
+  let filter = 'NOT(CurrentValue.[开发]="") && NOT(CurrentValue.[开始时间]="") && NOT(CurrentValue.[完成时间]="")'
+  if (username) filter += '&& CurrentValue.[开发]="' + username + '"'//无法通过 id 来查询
+  query.filter = filter
   return query
 }
 
@@ -60,96 +55,102 @@ async function batchUpdateRecords(records) {
   })
 }
 
-// search_and_replace
-export async function check_conflict_task(record_id:String) {
-  const s = performance.now();
-  console.log('>>> start check_conflict_task, record_id: ',record_id);
-
-  let allRecords: IRecord[] = []
-  let collideRecords : IRecord[] = []
-  let userRecordsMap = {}
-  // let userIds = []
+async function populateUserRecordsMap(username) {
   
-  const query = await populateQuery(record_id)
-
+  let userRecordsMap = new Map()
+  // let userIds: Set<String> = new Set();
+  
   // iterate over all records
+  const query = await populateQuery(username)
   for await (const data of await client.base.appTableRecord.listWithIterator({ params: query, path: { table_id: TABLEID } })) {
     const records = data?.items || [];
     // console.debug('record : ', JSON.stringify(records[0]))
     
-    const validRecords = records.filter(record => {
-      const fields = record.fields
-      return fields['开始时间'] != null && fields['完成时间'] != null && fields['开发'] != null
-    })
+    // const validRecords = records.filter(record => {
+    //   const fields = record.fields
+    //   return fields['开始时间'] != null && fields['完成时间'] != null && fields['开发'] != null
+    // })
 
-    console.info('>>> records length : ', records.length, 'valid records lenght : ',validRecords.length);
-    allRecords.push(...validRecords) 
+    console.info('>>> records length : ', records.length);
+    // allRecords.push(...validRecords) 
 
-    for (let i = 0; i < validRecords.length; i++) {
-      const record = validRecords[i]
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i]
       const userID = record.fields['开发'][0]['id']
       // console.log(userID)
-      let userRecords = userRecordsMap[userID] || []
+      let userRecords = userRecordsMap.get(userID) || []
       userRecords.push(record)
-      userRecordsMap[userID] = userRecords
+
+      userRecordsMap.set(userID,userRecords)
     }
   }
-  console.info('>>> allRecords length : ', allRecords.length);
-  // console.debug('userRecordsMap : ',JSON.stringify(userRecordsMap))
+  return userRecordsMap
+}
+
+// search_and_replace
+export async function check_conflict_task(username:String) {
+  const s = performance.now();
+  console.log('>>> start check_conflict_task, username: ',username);
+
+  let collideRecords : IRecord[] = []
   
-  for (let i = 0; i < allRecords.length; i++) {
-    // Get cell string from specified fieldId and recordId
-    const currentRecord = allRecords[i]
-    const record_id = currentRecord.record_id
-    const currentStartTime = currentRecord.fields['开始时间']
-    const currentEndTime = currentRecord.fields['完成时间']
-    // const currentTaskName = currentRecord.fields['需求名']
-    const currentTaskName = currentRecord.fields['任务标题'][0]['text']
-    const currentUsers = currentRecord.fields['开发'] || []
-    const currentUser = currentUsers[0]
-    const currentUserID = currentUser['id']
-    
+  const userRecordsMap = await populateUserRecordsMap(username)
 
-    // console.info('开始检查任务i ' + (i+1) +'/' + allRecords.length)
+  const userIDs = Array.from(userRecordsMap.keys())
+  console.info('>>> userIds length : ', userIDs.length);
+  // console.debug('userRecordsMap : ',JSON.stringify(userRecordsMap))
+  // userRecordsMap.keys.forEach((userID:String) => {
+  //   console.log(userID)
+  // })
+  userIDs.forEach((userID: String) => {
+    const records = userRecordsMap.get(userID)
 
-    let collideInfos = []
-    
-    for (let j = 0; j < userRecordsMap[currentUserID].length; j++) {
+    for (let i = 0; i < records.length; i++) {
+      // Get cell string from specified fieldId and recordId
+      const currentRecord = records[i]
+      const record_id = currentRecord.record_id
+      const currentStartTime = currentRecord.fields['开始时间']
+      const currentEndTime = currentRecord.fields['完成时间']
+      // const currentTaskName = currentRecord.fields['需求名']
+      const currentTaskName = currentRecord.fields['任务标题'][0]['text']
       
-      if (i == j) continue
-
-      const record = allRecords[j]
-      const startTime = record.fields['开始时间']
-      const endTime = record.fields['完成时间']
-      const taskName = record.fields['任务标题'][0]['text']
-      const users = record.fields['开发'] || []
-      const user = users[0]
-
+  
+      // console.info('开始检查任务i ' + (i+1) +'/' + allRecords.length)
+  
+      let collideInfos = []
       
-      // console.log('current User :', JSON.stringify(currentUser), 'user : ', JSON.stringify(user))
-      
-      if (currentUser['id'] != user['id']) continue
-
-      // console.log('检测任务', JSON.stringify(record))
-      if (isCollide(currentStartTime, currentEndTime, startTime, endTime)) {
-        console.log(currentTaskName + ' 和 ' + taskName + ' 有冲突')
+      for (let j = 0; j < records.length; j++) {
         
-        // const collideInfo = '!' + dayjs(startTime).tz('Asia/Shanghai').date() + "~" + dayjs(endTime).tz('Asia/Shanghai').date()+taskName
-        // console.log('>>> 冲突任务：',taskName)
-        collideInfos.push(taskName)
-        
+        if (i == j) continue
+  
+        const record = records[j]
+        const startTime = record.fields['开始时间']
+        const endTime = record.fields['完成时间']
+        const taskName = record.fields['任务标题'][0]['text']
+  
+        // console.log('current User :', JSON.stringify(currentUser), 'user : ', JSON.stringify(user))
+  
+        // console.log('检测任务', JSON.stringify(record))
+        if (isCollide(currentStartTime, currentEndTime, startTime, endTime)) {
+          // console.log(currentTaskName + ' 和 ' + taskName + ' 有冲突')
+          
+          // const collideInfo = '!' + dayjs(startTime).tz('Asia/Shanghai').date() + "~" + dayjs(endTime).tz('Asia/Shanghai').date()+taskName
+          // console.log('>>> 冲突任务：',taskName)
+          collideInfos.push(taskName)
+          
+        }
       }
+      
+      if(collideInfos.length > 0){
+        collideRecords.push({
+          record_id,
+          fields: {"冲突任务" : collideInfos.join('\n')}
+        })  
+      }
+      
     }
-    
-    if(collideInfos.length > 0){
-      collideRecords.push({
-        record_id,
-        fields: {"冲突任务" : collideInfos.join('\n')}
-      })  
-    }
-    
-  }
-
+  })
+  
   // console.debug('冲突任务： ', JSON.stringify(collideRecords))
 
   await batchUpdateRecords(collideRecords)
