@@ -21,6 +21,10 @@ const APP_TOKEN = process.env['PROD_APP_TOKEN']
 const PERSONAL_BASE_TOKEN = process.env['PROD_PERSONAL_BASE_TOKEN']
 const TABLEID = process.env['PROD_TABLE_ID']
 
+const client = new BaseClient({
+  appToken: APP_TOKEN,
+  personalBaseToken: PERSONAL_BASE_TOKEN,
+});
 
 function isCollide(start1,end1,start2,end2): boolean {
   return (start1 >= start2 && start1 < end2) ||
@@ -28,20 +32,9 @@ function isCollide(start1,end1,start2,end2): boolean {
     (start1 <= start2 && end1 >= end2)
 }
 
-// search_and_replace
-export async function check_conflict_task(record_id:String) {
-  const s = performance.now();
-  console.log('>>> start check_conflict_task, record_id: ',record_id);
-
-  const client = new BaseClient({
-    appToken: APP_TOKEN,
-    personalBaseToken: PERSONAL_BASE_TOKEN,
-  });
-  
-  
-  let allRecords: IRecord[] = []
-  let collideRecords : IRecord[] = []
+async function populateQuery(record_id) {
   let query = { page_size: 400 }
+  
   if (record_id) {
     const triggerRecordRes = await client.base.appTableRecord.get({path: { table_id: TABLEID, record_id : record_id}})  
     const triggerRecord = triggerRecordRes?.data?.record || {}
@@ -53,7 +46,18 @@ export async function check_conflict_task(record_id:String) {
     // if (developer) query.filter = 'CurrentValue.[开发]="' + developer + '"'
     console.debug(query)  
   }
+  return query
+}
+
+// search_and_replace
+export async function check_conflict_task(record_id:String) {
+  const s = performance.now();
+  console.log('>>> start check_conflict_task, record_id: ',record_id);
+
+  let allRecords: IRecord[] = []
+  let collideRecords : IRecord[] = []
   
+  const query = await populateQuery(record_id)
 
   // iterate over all records
   for await (const data of await client.base.appTableRecord.listWithIterator({ params: query, path: { table_id: TABLEID }, query : query })) {
