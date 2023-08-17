@@ -8,7 +8,14 @@ const port = 3000
 app.get('/check_conflict_task', async (req, res) => {
   const record_id = req.query.record_id 
   const result = await check_conflict_task(record_id);
-  res.send(result)
+  console.log('response : ' + result)
+  
+  // res.send(result)
+
+  const data = { message: result };
+  res.setHeader('Content-Type', 'application/json');
+  res.status(200).json(data);
+  
 });
 
 

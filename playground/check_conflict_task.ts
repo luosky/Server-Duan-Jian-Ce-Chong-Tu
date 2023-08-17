@@ -16,6 +16,7 @@ interface IRecord {
 // const PERSONAL_BASE_TOKEN = process.env['PERSONAL_BASE_TOKEN']
 // const TABLEID = process.env['TABLE_ID']
 
+//https://jiliguala.feishu.cn/base/bascn00boudohds3J3Rbix5h6Bd?table=tblgxvkbphNNrBEw&view=vew2hRFW2F#CategoryAutomatedUpdate&from=bitable_automation
 const APP_TOKEN = process.env['PROD_APP_TOKEN']
 const PERSONAL_BASE_TOKEN = process.env['PROD_PERSONAL_BASE_TOKEN']
 const TABLEID = process.env['PROD_TABLE_ID']
@@ -138,8 +139,9 @@ export async function check_conflict_task(record_id:String) {
     // */
 
   const e = performance.now();
-  console.log('检查完毕,耗时：'+ (e-s)/1000 + 's')
-  return "检测到 " + collideRecords.length + "条冲突任务，更新完毕" 
+  const duration = Number.parseInt((e-s)/1000)
+  console.log('检查完毕,耗时：'+ duration + 's')
+  return "检测到 " + collideRecords.length + "条冲突任务，更新完毕" + "耗时" + duration + "s"
 }
 
 
