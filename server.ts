@@ -20,7 +20,7 @@ app.get('/check_conflict_task', async (req, res) => {
 
 
 app.get('/', async (req, res) => {
-  await check_conflict_task();
+  // await check_conflict_task();
   res.send('hello world')
 });
 

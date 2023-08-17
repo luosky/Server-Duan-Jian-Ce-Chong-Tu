@@ -49,6 +49,17 @@ async function populateQuery(record_id) {
   return query
 }
 
+async function batchUpdateRecords(records) {
+  await client.base.appTableRecord.batchUpdate({
+    path: {
+      table_id: TABLEID,
+    },
+    data: {
+      records: records
+    }
+  })
+}
+
 // search_and_replace
 export async function check_conflict_task(record_id:String) {
   const s = performance.now();
@@ -56,96 +67,99 @@ export async function check_conflict_task(record_id:String) {
 
   let allRecords: IRecord[] = []
   let collideRecords : IRecord[] = []
+  let userRecordsMap = {}
+  // let userIds = []
   
   const query = await populateQuery(record_id)
 
   // iterate over all records
-  for await (const data of await client.base.appTableRecord.listWithIterator({ params: query, path: { table_id: TABLEID }, query : query })) {
+  for await (const data of await client.base.appTableRecord.listWithIterator({ params: query, path: { table_id: TABLEID } })) {
     const records = data?.items || [];
-    console.debug('record : ', JSON.stringify(records[0]))
+    // console.debug('record : ', JSON.stringify(records[0]))
     
     const validRecords = records.filter(record => {
       const fields = record.fields
       return fields['开始时间'] != null && fields['完成时间'] != null && fields['开发'] != null
-      // return fields['开始时间'] != null && fields['完成时间'] != null && fields['开发'] != null && (fields['需求阶段'] == '估时排期' || fields['需求阶段'] == '开发测试' )
     })
-    console.log('>>> records length : ', records.length, 'valid records lenght : ',validRecords.length);
+
+    console.info('>>> records length : ', records.length, 'valid records lenght : ',validRecords.length);
     allRecords.push(...validRecords) 
-  }
-    console.log('>>> allRecords length : ', allRecords.length);
 
-    
-    for (let i = 0; i < allRecords.length; i++) {
-      // Get cell string from specified fieldId and recordId
-      const currentRecord = allRecords[i]
-      const record_id = currentRecord.record_id
-      const currentStartTime = currentRecord.fields['开始时间']
-      const currentEndTime = currentRecord.fields['完成时间']
-      // const currentTaskName = currentRecord.fields['需求名']
-      const currentTaskName = currentRecord.fields['任务标题'][0]['text']
-      const currentUsers = currentRecord.fields['开发'] || []
-      const currentUser = currentUsers[0]
-      
-
-      console.log('开始检查任务i ' + (i+1) +'/' + allRecords.length)
-
-      let collideInfos = []
-      
-      for (let j = 0; j < allRecords.length; j++) {
-        
-        if (i == j) continue
-
-        const record = allRecords[j]
-        const startTime = record.fields['开始时间']
-        const endTime = record.fields['完成时间']
-        const taskName = record.fields['任务标题'][0]['text']
-        const users = record.fields['开发'] || []
-        const user = users[0]
-
-        
-        // console.log('current User :', JSON.stringify(currentUser), 'user : ', JSON.stringify(user))
-        
-        if (currentUser['id'] != user['id']) continue
-
-        // console.log('检测任务', JSON.stringify(record))
-        if (isCollide(currentStartTime, currentEndTime, startTime, endTime)) {
-          console.log(currentTaskName + ' 和 ' + taskName + ' 有冲突')
-          
-          // const collideInfo = '!' + dayjs(startTime).tz('Asia/Shanghai').date() + "~" + dayjs(endTime).tz('Asia/Shanghai').date()+taskName
-          // console.log('>>> 冲突任务：',taskName)
-          collideInfos.push(taskName)
-          
-        }
-      }
-      
-      if(collideInfos.length > 0){
-        collideRecords.push({
-          record_id,
-          fields: {"冲突任务" : collideInfos.join('\n')}
-        })  
-      }
-      
+    for (let i = 0; i < validRecords.length; i++) {
+      const record = validRecords[i]
+      const userID = record.fields['开发'][0]['id']
+      // console.log(userID)
+      let userRecords = userRecordsMap[userID] || []
+      userRecords.push(record)
+      userRecordsMap[userID] = userRecords
     }
-
-  console.debug('冲突任务： ', JSON.stringify(collideRecords))
-  console.log('总共有 %d 条冲突任务', collideRecords.length)
+  }
+  console.info('>>> allRecords length : ', allRecords.length);
+  // console.debug('userRecordsMap : ',JSON.stringify(userRecordsMap))
   
-  // batch update records
-    // /*
-    await client.base.appTableRecord.batchUpdate({
-      path: {
-        table_id: TABLEID,
-      },
-      data: {
-        records: collideRecords
+  for (let i = 0; i < allRecords.length; i++) {
+    // Get cell string from specified fieldId and recordId
+    const currentRecord = allRecords[i]
+    const record_id = currentRecord.record_id
+    const currentStartTime = currentRecord.fields['开始时间']
+    const currentEndTime = currentRecord.fields['完成时间']
+    // const currentTaskName = currentRecord.fields['需求名']
+    const currentTaskName = currentRecord.fields['任务标题'][0]['text']
+    const currentUsers = currentRecord.fields['开发'] || []
+    const currentUser = currentUsers[0]
+    const currentUserID = currentUser['id']
+    
+
+    // console.info('开始检查任务i ' + (i+1) +'/' + allRecords.length)
+
+    let collideInfos = []
+    
+    for (let j = 0; j < userRecordsMap[currentUserID].length; j++) {
+      
+      if (i == j) continue
+
+      const record = allRecords[j]
+      const startTime = record.fields['开始时间']
+      const endTime = record.fields['完成时间']
+      const taskName = record.fields['任务标题'][0]['text']
+      const users = record.fields['开发'] || []
+      const user = users[0]
+
+      
+      // console.log('current User :', JSON.stringify(currentUser), 'user : ', JSON.stringify(user))
+      
+      if (currentUser['id'] != user['id']) continue
+
+      // console.log('检测任务', JSON.stringify(record))
+      if (isCollide(currentStartTime, currentEndTime, startTime, endTime)) {
+        console.log(currentTaskName + ' 和 ' + taskName + ' 有冲突')
+        
+        // const collideInfo = '!' + dayjs(startTime).tz('Asia/Shanghai').date() + "~" + dayjs(endTime).tz('Asia/Shanghai').date()+taskName
+        // console.log('>>> 冲突任务：',taskName)
+        collideInfos.push(taskName)
+        
       }
-    })
-    // */
+    }
+    
+    if(collideInfos.length > 0){
+      collideRecords.push({
+        record_id,
+        fields: {"冲突任务" : collideInfos.join('\n')}
+      })  
+    }
+    
+  }
+
+  // console.debug('冲突任务： ', JSON.stringify(collideRecords))
+
+  await batchUpdateRecords(collideRecords)
 
   const e = performance.now();
   const duration = Number.parseInt((e-s)/1000)
-  console.log('检查完毕,耗时：'+ duration + 's')
-  return "检测到 " + collideRecords.length + "条冲突任务，更新完毕" + "耗时" + duration + "s"
+  
+  const response = "检测到 " + collideRecords.length + "条冲突任务，更新完毕" + "耗时" + duration + "s"
+  console.log(response)
+  return response
 }
 
 
