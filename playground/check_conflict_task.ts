@@ -39,7 +39,7 @@ async function populateQuery(username) {
   }
 
   let filter = 'NOT(CurrentValue.[开发]="") && NOT(CurrentValue.[开始时间]="") && NOT(CurrentValue.[完成时间]="")'
-  if (username) filter += '&& CurrentValue.[开发]="' + username + '"'//无法通过 id 来查询
+  if (username) filter += '&& CurrentValue.[开发]="' + username + '"'//无法通过 id 来查询，如果有同名人员会扩大范围，但不影响比对（查询时只支持名字，比对时可以用 id）
   query.filter = filter
   return query
 }
