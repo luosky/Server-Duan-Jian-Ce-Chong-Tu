@@ -1,4 +1,12 @@
 run = "npx vite-node --watch server.ts"
 
+[deployment]
+deploymentTarget = "cloudrun"
+run = ["sh", "-c", "npm start"]
+
+[[ports]]
+localPort = 3000
+externalPort = 80
+
 # [nix]
 # channel = "stable-21_11"

@@ -35,10 +35,10 @@ function isCollide(start1,end1,start2,end2): boolean {
 async function populateQuery(username) {
   let query = { 
     page_size: 500,
-    field_names: '["开发","任务标题","开始时间","完成时间"]'
+    field_names: '["开发","任务标题","开始时间","完成时间","需求阶段"]'
   }
 
-  let filter = 'NOT(CurrentValue.[开发]="") && NOT(CurrentValue.[开始时间]="") && NOT(CurrentValue.[完成时间]="")'
+  let filter = 'NOT(CurrentValue.[开发]="") && NOT(CurrentValue.[开始时间]="") && NOT(CurrentValue.[完成时间]="") && NOT(CurrentValue.[需求阶段]="已上线")'
   if (username) filter += '&& CurrentValue.[开发]="' + username + '"'//无法通过 id 来查询，如果有同名人员会扩大范围，但不影响比对（查询时只支持名字，比对时可以用 id）
   query.filter = filter
   return query
@@ -87,8 +87,9 @@ async function populateUserRecordsMap(username) {
   return userRecordsMap
 }
 
-// search_and_replace
+// 检查任务冲突
 export async function check_conflict_task(username:String) {
+  
   const s = performance.now();
   console.log('>>> start check_conflict_task, username: ',username);
 
@@ -141,27 +142,44 @@ export async function check_conflict_task(username:String) {
         }
       }
       
-      if(collideInfos.length > 0){
+      // if(collideInfos.length > 0){ // 不冲突的任务，需要清空「冲突任务」字段的内容
         collideRecords.push({
           record_id,
           fields: {"冲突任务" : collideInfos.join('\n')}
         })  
-      }
+      // }
       
     }
   })
   
-  // console.debug('冲突任务： ', JSON.stringify(collideRecords))
+  console.debug('冲突任务： ', JSON.stringify(collideRecords))
 
   await batchUpdateRecords(collideRecords)
 
   const e = performance.now();
   const duration = Number.parseInt((e-s)/1000)
   
-  const response = "检测到 " + collideRecords.length + "条冲突任务，更新完毕" + "耗时" + duration + "s"
+  const response = "更新 " + collideRecords.length + "条任务，更新完毕" + "耗时" + duration + "s"
   console.log(response)
   return response
 }
 
+
+export async function auto_create_task_for_requirement(requirement_id){
+  console.log(requirement_id)
+   await client.base.appTableRecord.create({
+    path: {
+      table_id: TABLEID,
+    },
+    data: {
+      fields: {
+        "需求" : [requirement_id]
+      }
+    }
+  })
+
+  
+  return "ok"
+}
 
 console.log('start')
